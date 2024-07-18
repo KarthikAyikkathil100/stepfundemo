@@ -335,10 +335,11 @@ resources:
                     Type: 'Task'
                     Resource:
                       Fn::Sub: 
-                        - arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:mapTask
+                        - arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:mapTaskFunction
                         - REGION: ${self:custom.REGION}
                           ACCOUNT_ID: ${self:custom.ACCOUNT_ID}
                     End: true
+              ItemsPath: "$.data"
               Next: LastFucntion
         RoleArn: !GetAtt StateMachineExecutionRole.Arn
 
