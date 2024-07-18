@@ -1,0 +1,349 @@
+service: stepfunction-demo
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: ap-south-1
+  # apiGateway:
+  #   binaryMediaTypes:
+  #     - '*/*'
+
+package:
+  individually: true
+
+plugins:
+ - serverless-step-functions
+ - serverless-offline
+
+
+custom:
+  ACCOUNT_ID: !Ref AWS::AccountId
+  REGION: !Ref AWS::Region
+
+# Lambda functions
+functions:
+  stepone:
+    name: stepOneFunction
+    handler: step1.handler
+    role: StepOneRole
+    events:
+      - httpApi:
+          path: /step1
+          method: post
+  steptwo:
+    name: stepTwoFunction
+    handler: step2.handler
+    role: StepTwoRole
+    events:
+      - httpApi:
+          path: /step2
+          method: get
+  HandleS3Upload:
+    name: handleS3Upload
+    handler: upload_handler.handler
+    role: HandleS3UploadRole
+    events:
+      - s3:
+          bucket: !Ref VideoBucket
+          event: s3:ObjectCreated:*
+          existing: true
+  stepOneError:
+    name: stepOneError
+    handler: handle_step1_error.handler
+    role: StepOneRole
+  stepTwoError:
+    name: stepTwoError
+    handler: handle_step2_error.handler
+    role: StepTwoRole
+  
+  init:
+    name: initFunction
+    handler: init_step_func.handler
+    role: InitRole
+    events:
+      - httpApi:
+          path: /init
+          method: get
+    environment:
+      STATE_ARN: !Ref MyNewStepFunction
+  
+  mapTask:
+    name: mapTaskFunction
+    handler: map.handler
+    role: MapTaskRole
+    events:
+      - httpApi:
+          path: /map-task
+          method: post
+  
+  lastFunction:
+    name: lastFunction
+    handler: last.handler
+    role: LastFunctionRole
+    events:
+      - httpApi:
+          path: /last-task
+          method: post
+
+
+
+resources:
+  Resources:
+    # Cloudwatch policy
+    CloudwatchAccessPolicy:
+      Type: AWS::IAM::Policy
+      Properties:
+        PolicyName: CloudwatchAccessPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+              Resource: '*'
+        Roles:
+          - !Ref StepOneRole
+          - !Ref StepTwoRole
+          - !Ref InitRole
+          - !Ref HandleS3UploadRole
+          - !Ref MapTaskRole
+          - !Ref LastFunctionRole
+    BucketAccessPolicy:
+      Type: AWS::IAM::Policy
+      Properties:
+        PolicyName: BucketAccessPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 's3:*'
+              Resource: 
+                - arn:aws:s3:::media.demo.test
+        Roles:
+          - !Ref StepOneRole
+    # Step function policy
+    StepFunctionExecutionPolicy:
+      Type: AWS::IAM::Policy
+      Properties:
+        PolicyName: StepFunctionExecutionPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'states:StartExecution'
+              Resource: !Ref MyNewStepFunction
+        Roles:
+          - !Ref InitRole
+    
+    # Lambda function execution role
+    StepOneRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: StepOneRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: 
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+    StepTwoRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: StepTwoRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: 
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+    InitRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: InitRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: 
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+    MapTaskRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: MapTaskRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: 
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+
+    LastFunctionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: LastFunctionRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: 
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+
+    HandleS3UploadRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: HandleS3UploadRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: 
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+
+          
+    StateMachineExecutionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - states.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: StateMachineExecutionPolicy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - lambda:InvokeFunction
+                  Resource: "*"
+    
+    # Step function definations
+    MyNewStepFunction:
+      Type: AWS::StepFunctions::StateMachine
+      Properties:
+        Definition:
+          Comment: 'A Demo state machine'
+          StartAt: 'Step1'
+          States:
+            WaitStep:
+              Type: 'Wait'
+              Seconds: 10
+              Next: Step2
+            Step1:
+              Type: 'Task'
+              Resource: 
+                Fn::Sub: 
+                  - arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:stepOneFunction
+                  - REGION: ${self:custom.REGION}
+                    ACCOUNT_ID: ${self:custom.ACCOUNT_ID}
+              Catch:
+                - ErrorEquals:
+                    - States.ALL
+                  Next: Step1ErrorHandle
+              Next: ChoiceStep
+            ChoiceStep:
+              Type: 'Choice'
+              Choices:
+                - Variable: "$.key1"
+                  IsPresent: false
+                  Next: WaitStep
+                - Variable: "$.key1"
+                  StringEquals: 'valueError'
+                  Next: Step1ErrorHandle
+                - Variable: "$.key1"
+                  StringEquals: 'value1'
+                  Next: Step2
+            Step2:
+              Type: 'Task'
+              Resource: 
+                Fn::Sub: 
+                  - arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:stepTwoFunction
+                  - REGION: ${self:custom.REGION}
+                    ACCOUNT_ID: ${self:custom.ACCOUNT_ID}
+              Catch:
+                - ErrorEquals:
+                    - States.ALL
+                  Next: Step2ErrorHandle
+              Next: MapState
+            Step1ErrorHandle:
+              Type: 'Task'
+              Resource:
+                Fn::Sub: 
+                  - arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:stepOneError
+                  - REGION: ${self:custom.REGION}
+                    ACCOUNT_ID: ${self:custom.ACCOUNT_ID}
+              End: true
+            Step2ErrorHandle:
+              Type: 'Task'
+              Resource:
+                Fn::Sub: 
+                  - arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:stepTwoError
+                  - REGION: ${self:custom.REGION}
+                    ACCOUNT_ID: ${self:custom.ACCOUNT_ID}
+              Next: Step1ErrorHandle
+            # MapFunction:
+            #   Type: 'Task'
+            #   Resource:
+            #     Fn::Sub: 
+            #       - arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:mapTask
+            #       - REGION: ${self:custom.REGION}
+            #         ACCOUNT_ID: ${self:custom.ACCOUNT_ID}
+            #   End: true
+            LastFucntion:
+              Type: 'Task'
+              Resource:
+                Fn::Sub: 
+                  - arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:lastFunction
+                  - REGION: ${self:custom.REGION}
+                    ACCOUNT_ID: ${self:custom.ACCOUNT_ID}
+              End: true
+            MapState:
+              Type: 'Map'
+              MaxConcurrency: 5
+              ItemProcessor:
+                ProcessorConfig:
+                  Mode: 'INLINE'
+                StartAt: 'ProcessAll'
+                States:
+                  ProcessAll:
+                    Type: 'Task'
+                    Resource:
+                      Fn::Sub: 
+                        - arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:mapTask
+                        - REGION: ${self:custom.REGION}
+                          ACCOUNT_ID: ${self:custom.ACCOUNT_ID}
+                    End: true
+              Next: LastFucntion
+        RoleArn: !GetAtt StateMachineExecutionRole.Arn
+
+    #Bucket
+    VideoBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: 'media.demo.test'
