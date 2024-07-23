@@ -3,7 +3,7 @@ exports.handler = (event, context, callback) => {
         // throw new Error('Test step 2 failure')
         console.log('step 2 logging');
         console.log(event)
-        const count = 10;
+        const count = 50;
         const data = []
         for (let i = 0; i < count; i++) data.push({id: i+1})
         const obj = {

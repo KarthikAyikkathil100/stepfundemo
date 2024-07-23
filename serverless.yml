@@ -5,9 +5,10 @@ provider:
   name: aws
   runtime: nodejs18.x
   region: ap-south-1
-  # apiGateway:
-  #   binaryMediaTypes:
-  #     - '*/*'
+  ecr:
+    images:
+      appimage:
+        path: './images'
 
 package:
   individually: true
@@ -86,6 +87,16 @@ functions:
           path: /last-task
           method: post
 
+  # Docker function
+  dockerDemoFunction:
+    name: dockerDemoFunction
+    role: dockerDemoFunctionRole
+    image:
+      name: appimage
+      entryPoint:
+          - '/lambda-entrypoint.sh'
+
+
 
 
 resources:
@@ -110,6 +121,7 @@ resources:
           - !Ref HandleS3UploadRole
           - !Ref MapTaskRole
           - !Ref LastFunctionRole
+          - !Ref dockerDemoFunctionRole
     BucketAccessPolicy:
       Type: AWS::IAM::Policy
       Properties:
@@ -220,7 +232,19 @@ resources:
                   - lambda.amazonaws.com
               Action:
                 - sts:AssumeRole
-
+    dockerDemoFunctionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: dockerDemoFunctionRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: 
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
           
     StateMachineExecutionRole:
       Type: AWS::IAM::Role
